@@ -1,0 +1,47 @@
+<apex:page controller="TechMassAssignmentController" sidebar="false">
+    <script>
+        function setFocusOnload();
+    </script>
+    <apex:sectionHeader title="Work Orders" subtitle="Work Orders and available technicians"/>
+    <apex:pageMessages />
+    <apex:form >
+        <c:SpinnerFacet />
+        <apex:pageBlock title="Technician Assignment" mode="detail" id="thePage">
+            <apex:pageBlockButtons rendered="{!workOrderWrappers != null}">
+                <apex:commandButton value="Save" action="{!save}" status="spinner" reRender="workOrdertable"/>
+                <apex:commandButton action="{!cancel}" value="Cancel" immediate="true"/>
+            </apex:pageBlockButtons>
+            <apex:pageBlockSection id="workOrders" collapsible="false" title="Work Orders" columns="1">
+
+                <apex:pageBlockTable id="workOrdertable" value="{!workOrderWrappers}" var="woWrapper">
+                    <apex:column headerValue="Name"> 
+                            <apex:outputText value="{!woWrapper.order.Name}" />
+                    </apex:column>
+                    <apex:column headervalue="Available Technicians" id="technicians" >
+                        <apex:selectList value="{!woWrapper.chosenTechId}" id="theTechList" multiSelect="false" title="Available Technicians" size="1">
+                            <apex:selectOptions value="{!woWrapper.items}"/>
+                            <!-- <apex:actionSupport event="onchange" action="{!woWrapper.updateWorkOrder}" rerender="curTech" status="spinner"/> -->
+                        </apex:selectList>
+                    <!-- <apex:actionStatus id="saveStatus" startText=" (saving...)" /> -->
+                    </apex:column>
+                    <apex:column headerValue="Order Status">
+                            <apex:outputText value="{!woWrapper.order.SVMXC__Order_Status__c}" />
+                    </apex:column>
+                    <apex:column headerValue="Tech Declined Reason">
+                            <apex:inputText value="{!woWrapper.order.NTT_Tech_Declined_Reason__c}" />
+                    </apex:column>
+                    <apex:column headerValue="Current Technician" id="curTech">
+                            <apex:outputText value="{!woWrapper.techName}" />
+                    </apex:column>
+                    <apex:column headerValue="Special Servicer Code">
+                            <apex:outputText value="{!woWrapper.order.Special_Servicer_Code__c}" />
+                    </apex:column>
+                    <apex:column headerValue="Product Line">
+                            <apex:outputText value="{!woWrapper.order.NTT_Product_Line__c}" />
+                    </apex:column>
+                </apex:pageBlockTable>
+
+            </apex:pageBlockSection>
+        </apex:pageBlock>
+    </apex:form>
+</apex:page>

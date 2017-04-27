@@ -1,6 +1,8 @@
 public with sharing class TechMassAssignmentController {
 
     public List<WorkOrderWrapper> workOrderWrappers {get; set;}
+    public final List<String> SERVTYPES = new List<String>{'FSE','SSP','LSP'};
+    public final String TYPEORDER = 'FSL';
 
     
     public TechMassAssignmentController(){
@@ -28,7 +30,7 @@ public with sharing class TechMassAssignmentController {
         }
 
         List<SVMXC__Service_Order__c> workOrders = [SELECT Id, Name, NTT_Tech_Declined_Reason__c, SVMXC__Group_Member__c, SVMXC__Group_Member__r.Name, SVMXC__Order_Status__c, 
-                                                    Special_Servicer_Code__c, NTT_Product_Line__c, SVMXC__Latitude__c, SVMXC__Longitude__c
+                                                    Special_Servicer_Code__c, NTT_Product_Line__c, SVMXC__Latitude__c, SVMXC__Longitude__c, Exclusion_List__c
                                                     FROM SVMXC__Service_Order__c WHERE (Id IN :workOrderIds)];
 
         // create map of products and avail techs that can be assigned
@@ -65,11 +67,10 @@ public with sharing class TechMassAssignmentController {
         products = products.substring(0, products.length() - 1);
         system.debug('>>> products: ' + products);
 
-        List<String> srvcTypes = new List<String>{'FSE','SSP','LSP'};
         String query = 'SELECT Id, Name, NTT_Servicer_Type__c, SVMXC__Active__c, Special_Servicer_Code__c, NTT_Product_Line_Serviced__c, BSP_Product_Line_Serviced_2__c, '
-                        + 'SVMXC__Latitude__c, SVMXC__Latitude_Home__c, SVMXC__Longitude__c, SVMXC__Longitude_Home__c '
+                        + 'SVMXC__Latitude__c, SVMXC__Latitude_Home__c, SVMXC__Longitude__c, SVMXC__Longitude_Home__c, Work_Count__c '
                         + 'FROM SVMXC__Service_Group_Members__c WHERE Id IN :technicianIds AND SVMXC__Active__c = true AND (NTT_Product_Line_Serviced__c INCLUDES(' + products + ') '
-                        + 'OR BSP_Product_Line_Serviced_2__c INCLUDES(' + products + ')) AND NTT_Servicer_Type__c IN :srvcTypes ORDER BY NTT_Servicer_Type__c DESC';
+                        + 'OR BSP_Product_Line_Serviced_2__c INCLUDES(' + products + ')) AND NTT_Servicer_Type__c IN :SERVTYPES ORDER BY NTT_Servicer_Type__c DESC';
 
         List<SVMXC__Service_Group_Members__c> technicians = Database.query(query);
         return technicians;
@@ -164,6 +165,7 @@ public with sharing class TechMassAssignmentController {
             return allProducts;
         }
 
+        @TestVisible
         private List<String> splitString(String str) {
             if(str != null && str != '') {
                 return str.split(';');
@@ -236,9 +238,10 @@ public with sharing class TechMassAssignmentController {
         }
         
         private String createTechString(TechnicianDistances tech) {
-            return tech.technician.Name + ' | ' + tech.technician.NTT_Servicer_Type__c + ' | ' + tech.distanceCurr + 'mi' + ' | ' + tech.distanceHome + 'mi';
+            return tech.technician.Name + ' | ' + tech.distanceCurr + 'mi | ' + tech.distanceHome + 'mi | ' + tech.technician.NTT_Servicer_Type__c + ' | ' + String.valueOf(tech.technician.Work_Count__c == null ? 0 : tech.technician.Work_Count__c);
         }
 
+        @TestVisible
         private Decimal calculateDistance(Decimal lat1, Decimal lon1, Decimal lat2, Decimal lon2) {
             if (lat1 != null && lon1 != null && lat2 != null && lon2 != null) {
                 Double r = 6371.00;
@@ -259,10 +262,11 @@ public with sharing class TechMassAssignmentController {
     }
 
 
-    // this class is used to sort the tecnicians by distance
+    // this class is used to sort the technicians by distance and servicer type
     public class TechnicianDistances implements Comparable {
         public Decimal distanceHome;
         public Decimal distanceCurr;
+        public final Integer thisIndex;
         public SVMXC__Service_Group_Members__c technician;
 
 
@@ -270,13 +274,24 @@ public with sharing class TechMassAssignmentController {
             distanceHome = distHome;
             distanceCurr = distCurr;
             technician = tech;
+            thisIndex = TYPEORDER.indexOf(technician.NTT_Servicer_Type__c.subString(0,1));
         }
-        
+
         public Integer compareTo(Object compareTo) {
             TechnicianDistances compareToTech = (TechnicianDistances)compareTo;
-            if (distanceCurr == compareToTech.distanceCurr) return 0;
-            if (distanceCurr > compareToTech.distanceCurr) return 1;
-            return -1;        
+            if(thisIndex == TYPEORDER.indexOf(compareToTech.NTT_Servicer_Type__c.subString(0,1))) {
+                if (distanceCurr == compareToTech.distanceCurr) {
+                    return 0;
+                }
+                else if (distanceCurr > compareToTech.distanceCurr) {
+                    return 1;
+                }
+                return -1;        
+            }
+            else if (thisIndex > TYPEORDER.indexOf(compareToTech.NTT_Servicer_Type__c.subString(0,1))) {
+                return 1;
+            }
+            return -1;
         }
     }
 

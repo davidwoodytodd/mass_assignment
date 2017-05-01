@@ -1,9 +1,11 @@
 @IsTest(SeeAllData = false)
 public with sharing class TechMassAssignmentController_Test {
 
-    //  This test class covers TechMassAssignmentController.cls 100%
+    //  This test class covers TechMassAssignmentController.cls
 
-    static Account acct;
+    static Account acct1;
+    static Account acct2;
+    static Id sgId;
     static List<SVMXC__Service_Order__c> workOrders = new List<SVMXC__Service_Order__c>();
     static List<SVMXC__Service_Group_Members__c> technicians = new List<SVMXC__Service_Group_Members__c>();
     static final RecordType rt = [SELECT Id, Name, DeveloperName, SobjectType FROM RecordType WHERE SobjectType = 'SVMXC__Service_Order__c' AND DeveloperName = 'Parent'];
@@ -31,30 +33,36 @@ public with sharing class TechMassAssignmentController_Test {
     static void setup() {
         List<Product2> productsToInsert = new List<Product2>();
 
-        acct = createNewAccount();
-        insert acct;
+        acct1 = createNewAccount('Reily');
+        acct2 = createNewAccount('');
+        insert new List<Account>{acct1, acct2};
 
-        Id sgId = createServiceGroup();
+        sgId = createServiceGroup();
 
-        // create 6 work orders & 6 products
-        for(Integer i = 0; i < productNames.size(); i++) {
-            productsToInsert.add(createProduct(productValues[i]));
-            workOrders.add(createServiceOrder(productNames[i], acctLatLongs[i]));
-        }
-        insert workOrders;
-
-        // create 4 techs
-        for(List<Decimal> latLong: techLatLongs) {
-            SVMXC__Service_Group_Members__c newTech = createGroupMember(latLong, sgId);
+        // create 4 techs; 2 Reily, 2 null
+        for(Integer i = 0; i < techLatLongs.size(); i++) {
+            SVMXC__Service_Group_Members__c newTech = createGroupMember(techLatLongs[i], i < 2 ? 'Reily' : '', i);
             technicians.add(newTech);
         }
         insert technicians;
+
+        // create 6 work orders & 6 products; 4 WOs for acct1, 2 for acct2
+        for(Integer i = 0; i < productNames.size(); i++) {
+            productsToInsert.add(createProduct(productValues[i]));
+            workOrders.add(createServiceOrder(productNames[i], acctLatLongs[i], i < 4 ? acct1.Id : acct2.Id));
+            if(i == 1) {
+                // add an Exclusion to one of the WOs
+                workOrders[1].Exclusion_List__c = technicians[1].Id;
+            }
+        System.debug(loggingLevel.Error, '*** workOrders: ' + workOrders);
+        }
+        insert workOrders;
     }
 
-    private static Account createNewAccount() {
+    private static Account createNewAccount(String code) {
         return new Account(
-            Name = 'A Test Account Inc',
-            Special_Servicer_Code__c = 'FSE',
+            Name = 'A Test Account Inc ' + code,
+            Special_Servicer_Code__c = code,
             BillingStreet = '123 Main St',
             BillingCity = 'Charlotte',
             BillingState = 'NC',
@@ -80,11 +88,11 @@ public with sharing class TechMassAssignmentController_Test {
         );
     }
 
-    private static SVMXC__Service_Order__c createServiceOrder(String productName, List<Decimal> latLong) {
+    private static SVMXC__Service_Order__c createServiceOrder(String productName, List<Decimal> latLong, Id acctId) {
         return new SVMXC__Service_Order__c(
             RecordTypeId = rt.Id,
             NTT_Product_Line__c = productName, 
-            SVMXC__Company__c = acct.Id,
+            SVMXC__Company__c = acctId,
             SVMXC__Latitude__c = latLong[0],
             SVMXC__Longitude__c = latLong[1],
             SVMXC__Order_Status__c = 'OPEN',
@@ -103,14 +111,15 @@ public with sharing class TechMassAssignmentController_Test {
         return sg.Id;
     }
 
-    private static SVMXC__Service_Group_Members__c createGroupMember(List<Decimal> latLong, Id sgId) {
+    private static SVMXC__Service_Group_Members__c createGroupMember(List<Decimal> latLong, String code, Integer i) {
+        List<String> servicerTypes = new List<String>{'FSE','FSE','SSP','LSP'};
         return new SVMXC__Service_Group_Members__c(
                 Name = 'John Doe - ' + DateTime.now().millisecond(),
                 NTT_Product_Line_Serviced__c = String.join(productNames, ';'),
                 BSP_Product_Line_Serviced_2__c = 'ESPRESSO',
-                NTT_Servicer_Type__c = 'FSE',
+                NTT_Servicer_Type__c = servicerTypes.get(i),
                 SVMXC__Active__c = true,
-                Special_Servicer_Code__c = 'Reily',
+                Special_Servicer_Code__c = code,
                 SVMXC__Latitude__c = latLong[0],
                 SVMXC__Latitude_Home__c = latLong[0],
                 SVMXC__Longitude__c = latLong[1],
@@ -118,6 +127,7 @@ public with sharing class TechMassAssignmentController_Test {
                 SVMXC__Service_Group__c = sgId
         );
     }
+
 
     private static PageReference setupTestObjects() {
             List<Id> workOrderIds = new List<Id>();
@@ -182,7 +192,7 @@ public with sharing class TechMassAssignmentController_Test {
 
         // simulate populating items picklist on page
         List<SelectOption> items = massAssignController.workOrderWrappers[0].getItems();
-        System.assertEquals(5, items.size());
+        System.assertEquals(3, items.size());
 
         // test Calculate Distance with missing parameter
         Decimal val = massAssignController.workOrderWrappers[0].calculateDistance(null, null, null, null);
@@ -225,7 +235,8 @@ public with sharing class TechMassAssignmentController_Test {
         // assert that controller created all wrappers correctly
         System.assertEquals(workOrders.size(), massAssignController.workOrderWrappers.size());
 
-        Id techId = technicians[1].Id;
+        Id techId = massAssignController.workOrderWrappers[0].technicians[1].technician.Id;
+        //massAssignController.workOrderWrappers[0].technicians[1].technician.SVMXC__Salesforce_User__c = techUser.Id;
 
         // simulate changing a technician from the page
         massAssignController.workOrderWrappers[0].chosenTechId = techId;

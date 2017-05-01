@@ -2,7 +2,6 @@ public with sharing class TechMassAssignmentController {
 
     public List<WorkOrderWrapper> workOrderWrappers {get; set;}
     public final List<String> SERVTYPES = new List<String>{'FSE','SSP','LSP'};
-    public final String TYPEORDER = 'FSL';
 
     
     public TechMassAssignmentController(){
@@ -68,7 +67,7 @@ public with sharing class TechMassAssignmentController {
         system.debug('>>> products: ' + products);
 
         String query = 'SELECT Id, Name, NTT_Servicer_Type__c, SVMXC__Active__c, Special_Servicer_Code__c, NTT_Product_Line_Serviced__c, BSP_Product_Line_Serviced_2__c, '
-                        + 'SVMXC__Latitude__c, SVMXC__Latitude_Home__c, SVMXC__Longitude__c, SVMXC__Longitude_Home__c, Work_Count__c '
+                        + 'SVMXC__Latitude__c, SVMXC__Latitude_Home__c, SVMXC__Longitude__c, SVMXC__Longitude_Home__c, Work_Count__c, SVMXC__Salesforce_User__c '
                         + 'FROM SVMXC__Service_Group_Members__c WHERE Id IN :technicianIds AND SVMXC__Active__c = true AND (NTT_Product_Line_Serviced__c INCLUDES(' + products + ') '
                         + 'OR BSP_Product_Line_Serviced_2__c INCLUDES(' + products + ')) AND NTT_Servicer_Type__c IN :SERVTYPES ORDER BY NTT_Servicer_Type__c DESC';
 
@@ -116,21 +115,27 @@ public with sharing class TechMassAssignmentController {
         List<SVMXC__Service_Order__c> ordersToUpdate = new List<SVMXC__Service_Order__c>();
         for(WorkOrderWrapper wrapper : workOrderWrappers) {
             System.debug(loggingLevel.Error, '*** wrapper: ' + wrapper);
-            if(wrapper.chosenTechId != null) {
-                wrapper.order.SVMXC__Group_Member__c = wrapper.chosenTechId;
-                wrapper.order.SVMXC__Order_Status__c = 'Work Order Emailed';
-                for(TechnicianDistances tech : wrapper.technicians) {
-                    if(tech.technician.Id == wrapper.chosenTechId) {
-                        wrapper.techName = tech.technician.Name;
+            if(wrapper.chosenTechId == null) continue;
+
+            wrapper.order.SVMXC__Group_Member__c = wrapper.chosenTechId;
+            // this is done within the workflow
+            //wrapper.order.SVMXC__Order_Status__c = 'Work Order Emailed';
+            for(TechnicianDistances tech : wrapper.technicians) {
+                if(tech.technician.Id == wrapper.chosenTechId) {
+                    wrapper.techName = tech.technician.Name;
+                    if(tech.technician.SVMXC__Salesforce_User__c != null) {
+                        wrapper.order.OwnerId = tech.technician.SVMXC__Salesforce_User__c;
                     }
+
                 }
-                ordersToUpdate.add(wrapper.order);
             }
+            ordersToUpdate.add(wrapper.order);
         }
+
         if(ordersToUpdate.size() > 0) {
             update ordersToUpdate;
         }
-        // creation and send of emails to techs happens within a visual flow
+        // creation and send of emails to techs happens within a workflow on change of SVMXC__Group_Member__c
     }
     
 
@@ -192,6 +197,16 @@ public with sharing class TechMassAssignmentController {
             }
             set;
         }
+        public Set<String> exclusions {
+            get {
+                exclusions = new Set<String>();
+                if((exclusions == null || exclusions.size() == 0) && order.Exclusion_List__c != null) {
+                    exclusions.addAll(new List<String>(order.Exclusion_List__c.split(',')));
+                }
+                return exclusions;
+            }
+            set;
+        }
 
 
         public WorkOrderWrapper(SVMXC__Service_Order__c order, List<SVMXC__Service_Group_Members__c> technicians){
@@ -216,17 +231,21 @@ public with sharing class TechMassAssignmentController {
                 techDistances.add(new TechnicianDistances(distanceHome, distanceCurr, tech));
             }
 
-            // TODO: sort by Service Type then Distance?
+            // this will sort all of the avail techs by Servicer Type first
+            // then distance. Servicer Type order is same as SERVTYPES
             techDistances.sort();
             return techDistances;
         }
 
         private List<SelectOption> populateTechnicianOptions() {
             List<SelectOption> options = new List<SelectOption>();
-
             if(technicians.size() > 0) {
                 options.add(new SelectOption('', '-- Please Select --'));
                 for(TechnicianDistances tech : technicians) {
+                    // filter out any exclusions
+                    if(exclusions.contains(tech.technician.Id)) continue;
+                    // filter out techs if the WO has a Spec Servicer Code and the codes do not match
+                    if(order.Special_Servicer_Code__c != null && !order.Special_Servicer_Code__c.equalsIgnoreCase(tech.technician.Special_Servicer_Code__c)) continue;
                     options.add(new SelectOption(tech.technician.Id, createTechString(tech)));
                 }
             }
@@ -262,8 +281,9 @@ public with sharing class TechMassAssignmentController {
     }
 
 
-    // this class is used to sort the technicians by distance and servicer type
+    // this class is used to sort the technicians by servicer type and distance
     public class TechnicianDistances implements Comparable {
+        public final String TYPEORDER = 'FSL';
         public Decimal distanceHome;
         public Decimal distanceCurr;
         public final Integer thisIndex;
@@ -274,12 +294,12 @@ public with sharing class TechMassAssignmentController {
             distanceHome = distHome;
             distanceCurr = distCurr;
             technician = tech;
-            thisIndex = TYPEORDER.indexOf(technician.NTT_Servicer_Type__c.subString(0,1));
+            thisIndex = TYPEORDER.indexOf(this.technician.NTT_Servicer_Type__c.subString(0,1));
         }
 
         public Integer compareTo(Object compareTo) {
             TechnicianDistances compareToTech = (TechnicianDistances)compareTo;
-            if(thisIndex == TYPEORDER.indexOf(compareToTech.NTT_Servicer_Type__c.subString(0,1))) {
+            if(thisIndex == TYPEORDER.indexOf(compareToTech.technician.NTT_Servicer_Type__c.subString(0,1))) {
                 if (distanceCurr == compareToTech.distanceCurr) {
                     return 0;
                 }
@@ -288,7 +308,7 @@ public with sharing class TechMassAssignmentController {
                 }
                 return -1;        
             }
-            else if (thisIndex > TYPEORDER.indexOf(compareToTech.NTT_Servicer_Type__c.subString(0,1))) {
+            else if (thisIndex > TYPEORDER.indexOf(compareToTech.technician.NTT_Servicer_Type__c.subString(0,1))) {
                 return 1;
             }
             return -1;

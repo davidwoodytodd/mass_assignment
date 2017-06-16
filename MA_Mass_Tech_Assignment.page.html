@@ -8,47 +8,65 @@
         <c:SpinnerFacet />
         <apex:pageBlock title="Technician Assignment" mode="detail" id="thePage">
             <apex:pageBlockButtons rendered="{!workOrderWrappers != null}">
-                <apex:commandButton value="Save" action="{!save}" status="spinner" reRender="workOrdertable"/>
-                <apex:commandButton action="{!cancel}" value="Cancel" immediate="true"/>
+                <apex:commandButton value="Assign" action="{!save}" status="spinner" reRender="workOrdertable"/>
+                <apex:commandButton value="Assign & Email" action="{!saveAndEmail}" status="spinner" reRender="workOrdertable"/>
+                <apex:commandButton value="Cancel" action="{!cancel}" immediate="true"/>
             </apex:pageBlockButtons>
-            <apex:pageBlockSection id="workOrders" collapsible="false" title="Work Orders" columns="1">
+            <!-- <apex:pageBlockSection id="workOrders" collapsible="false" title="Work Orders" columns="1"> -->
 
-                <apex:pageBlockTable id="workOrdertable" value="{!workOrderWrappers}" var="woWrapper">
-                    <apex:column headerValue="Name"> 
-                            <apex:outputText value="{!woWrapper.order.Name}" />
+                <apex:pageBlockTable id="workOrdertable" value="{!workOrderWrappers}" var="woWrapper" columnsWidth="20px, 100px, 20px, 20px, 20px, 20px, 20px, 20px, 20px, 20px, 20px, 500px">
+                    <apex:column headerValue="Name">
+                            <apex:outputLink value="{!URLFOR($Action.SVMXC__Service_Order__c.View, woWrapper.order.Id)}" target="_blank">{!woWrapper.order.Name}</apex:outputLink>
                     </apex:column>
                     <apex:column headervalue="Available Technicians" id="technicians" >
                         <apex:selectList value="{!woWrapper.chosenTechId}" id="theTechList" multiSelect="false" title="Available Technicians" size="1">
                             <apex:selectOptions value="{!woWrapper.items}"/>
                         </apex:selectList>
                     </apex:column>
-                    <apex:column headerValue="Order Status">
+                    <apex:column >
+                            <apex:facet name="header">Order<br/>Status</apex:facet>
                             <apex:outputText value="{!woWrapper.order.SVMXC__Order_Status__c}" />
                     </apex:column>
-                    <apex:column headerValue="Tech Declined Reason">
+                    <apex:column >
+                            <apex:facet name="header">Tech Declined<br/>Reason</apex:facet>
                             <apex:outputText value="{!woWrapper.order.NTT_Tech_Declined_Reason__c}" />
                     </apex:column>
-                    <apex:column headerValue="Current Technician" id="curTech">
+                    <apex:column >
+                            <apex:facet name="header">Current<br/>Technician</apex:facet>
                             <apex:outputText value="{!woWrapper.techName}" />
                     </apex:column>
-                    <apex:column headerValue="Special Servicer Code">
+                    <apex:column >
+                            <!-- <apex:facet name="header">Filter Techs by<br/>Servicer Code</apex:facet> -->
+                            <apex:inputCheckbox value="{!woWrapper.filterTechsByServ}" onchange="toggleFiltering()"/>
+                    </apex:column>
+                    <apex:column >
+                            <apex:facet name="header">Special<br/>Servicer<br/>Code</apex:facet>
                             <apex:outputText value="{!woWrapper.order.Special_Servicer_Code__c}" />
                     </apex:column>
-                    <apex:column headerValue="Product Line">
+                    <apex:column >
+                            <!-- <apex:facet name="header">Filter Techs by<br/>Product Type</apex:facet> -->
+                            <apex:inputCheckbox value="{!woWrapper.filterTechsByProd}" onchange="toggleFiltering()"/>
+                    </apex:column>
+                    <apex:column >
+                            <apex:facet name="header">Product<br/>Line</apex:facet>
                             <apex:outputText value="{!woWrapper.order.BSP_Product_Line__c}" />
                     </apex:column>
                     <apex:column headerValue="Priority">
                             <apex:outputText value="{!woWrapper.order.SVMXC__Priority__c}" />
                     </apex:column>
-                    <apex:column headerValue="Order Type">
+                    <apex:column >
+                            <apex:facet name="header">Order<br/>Type</apex:facet>
                             <apex:outputText value="{!woWrapper.order.SVMXC__Order_Type__c}" />
                     </apex:column>
-                    <apex:column headerValue="Dispatch Notes">
+                    <apex:column headerValue="Dispatch Notes" style="max-height:100px; overflow:hidden;">
+                        <div  style="overflow-y:auto;max-height:100px; min-width:30em;">
                             <apex:outputText value="{!woWrapper.order.Dispatch_Notes__c}" />
+                        </div>
                     </apex:column>
                 </apex:pageBlockTable>
+                <apex:actionFunction name="toggleFiltering" action="{!toggleFiltering}" rerender="workOrdertable"></apex:actionFunction>
 
-            </apex:pageBlockSection>
+            <!-- </apex:pageBlockSection> -->
         </apex:pageBlock>
     </apex:form>
 </apex:page>

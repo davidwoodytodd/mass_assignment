@@ -12,12 +12,12 @@ public with sharing class TechMassAssignmentController {
         }
         catch(Exception ex) {
             System.debug(loggingLevel.Error, '>>> Page Exception: ' + ex.getMessage() + ' : ' + ex.getStackTraceString());
-            ApexPages.addMessage(new apexPages.message(apexpages.severity.error, 'No WorkOrder or Technician values were received.\nPlease re-run from the map page.'));
+            ApexPages.addMessage(new apexPages.message(apexpages.severity.error, 'No WorkOrder or Technician values were received. Please re-run from the map page.'));
             return;
         }
         List<Id> workOrderIds = new List<Id>();
         List<Id> technicianIds = new List<Id>();
-        Map<String, List<SVMXC__Service_Group_Members__c>> availTechsByProduct;
+        //Map<String, List<SVMXC__Service_Group_Members__c>> availTechsByProduct;
 
         for(Id id: sObjectIds) {
             if(id.getSobjectType() == Schema.SVMXC__Service_Order__c.SObjectType) {
@@ -29,75 +29,40 @@ public with sharing class TechMassAssignmentController {
         }
 
         List<SVMXC__Service_Order__c> workOrders = [SELECT Id, Name, NTT_Tech_Declined_Reason__c, SVMXC__Group_Member__c, SVMXC__Group_Member__r.Name, SVMXC__Order_Status__c, 
-                                                    Special_Servicer_Code__c, BSP_Product_Line__c, SVMXC__Latitude__c, SVMXC__Longitude__c, Exclusion_List__c, SVMXC__Priority__c,
-                                                    SVMXC__Order_Type__c, Dispatch_Notes__c
+                                                    Special_Servicer_Code__c, BSP_Product_Line__c, BSP_WorkOrder_Distribution_List__c, SVMXC__Latitude__c, SVMXC__Longitude__c, 
+                                                    Exclusion_List__c, SVMXC__Priority__c, SVMXC__Order_Type__c, Dispatch_Notes__c
                                                     FROM SVMXC__Service_Order__c WHERE (Id IN :workOrderIds)];
 
+        List<SVMXC__Service_Group_Members__c> technicians = [SELECT Id, Name, NTT_Servicer_Type__c, SVMXC__Active__c, Special_Servicer_Code__c, NTT_Product_Line_Serviced__c, 
+                                                            BSP_Product_Line_Serviced_2__c, SVMXC__Latitude__c, SVMXC__Latitude_Home__c, SVMXC__Longitude__c, SVMXC__Longitude_Home__c, 
+                                                            Work_Count__c, SVMXC__Salesforce_User__c, BSP_WorkOrder_Distribution_List__c
+                                                            FROM SVMXC__Service_Group_Members__c WHERE Id IN :technicianIds AND SVMXC__Active__c = true 
+                                                            AND NTT_Servicer_Type__c IN :SERVTYPES ORDER BY NTT_Servicer_Type__c DESC];
+
         // create map of products and avail techs that can be assigned
-        availTechsByProduct = retrieveAndFilterAvailTechs(workOrders, technicianIds);
+        //availTechsByProduct = retrieveAndFilterAvailTechs(workOrders, technicianIds);
 
         // build WOs to be displayed on the page
         workOrderWrappers = new List<WorkOrderWrapper>();
         for(SVMXC__Service_Order__c workOrder: workOrders) {
-            workOrderWrappers.add(new WorkOrderWrapper(workOrder, availTechsByProduct.get(workOrder.BSP_Product_Line__c)));
+            workOrderWrappers.add(new WorkOrderWrapper(workOrder, technicians));
         }
     }
 
-    private Map<String, List<SVMXC__Service_Group_Members__c>> retrieveAndFilterAvailTechs(List<SVMXC__Service_Order__c> workOrders, List<Id> technicianIds) {
-        // create shell of available techs for each work order Product Line
-        Map<String, List<SVMXC__Service_Group_Members__c>> productToTechsMap = new Map<String, List<SVMXC__Service_Group_Members__c>>();
-        for(SVMXC__Service_Order__c order: workOrders) {
-            if(!productToTechsMap.containsKey(order.BSP_Product_Line__c)) {
-                productToTechsMap.put(order.BSP_Product_Line__c, new List<SVMXC__Service_Group_Members__c>());
-            }
-        }
-
-        List<TechnicianWrapper> techWrappers = buildTechnicianWrappers(queryAvailTechsForAllProducts(productToTechsMap.keySet(), technicianIds));
-
-        populateAvailTechsByProductMap(productToTechsMap, techWrappers);
-        return productToTechsMap;
-    }
-
-    private List<SVMXC__Service_Group_Members__c> queryAvailTechsForAllProducts(Set<String> productSet, List<Id> technicianIds) {
-        String products = '';
-
-        for(String str : productSet) {
-            products += '\'' + str + '\'' + ',';
-        }
-        products = products.substring(0, products.length() - 1);
-        system.debug('>>> products: ' + products);
-
-        String query = 'SELECT Id, Name, NTT_Servicer_Type__c, SVMXC__Active__c, Special_Servicer_Code__c, NTT_Product_Line_Serviced__c, BSP_Product_Line_Serviced_2__c, '
-                        + 'SVMXC__Latitude__c, SVMXC__Latitude_Home__c, SVMXC__Longitude__c, SVMXC__Longitude_Home__c, Work_Count__c, SVMXC__Salesforce_User__c '
-                        + 'FROM SVMXC__Service_Group_Members__c WHERE Id IN :technicianIds AND SVMXC__Active__c = true AND (NTT_Product_Line_Serviced__c INCLUDES(' + products + ') '
-                        + 'OR BSP_Product_Line_Serviced_2__c INCLUDES(' + products + ')) AND NTT_Servicer_Type__c IN :SERVTYPES ORDER BY NTT_Servicer_Type__c DESC';
-
-        List<SVMXC__Service_Group_Members__c> technicians = Database.query(query);
-        return technicians;
-    }
-
-    private List<TechnicianWrapper> buildTechnicianWrappers(List<SVMXC__Service_Group_Members__c> technicians) {
-        List<TechnicianWrapper> techWrappers = new List<TechnicianWrapper>();
-        for(SVMXC__Service_Group_Members__c tech: technicians) {
-            techWrappers.add(new TechnicianWrapper(tech));
-        }
-        return techWrappers;
-    }
-
-    // this method builds a map of all of the qualified techs that match the specific product line
-    private void populateAvailTechsByProductMap(Map<String, List<SVMXC__Service_Group_Members__c>> productToTechsMap, List<TechnicianWrapper> techWrappers) {
-        for(String productLine : productToTechsMap.keySet()) {
-            for(TechnicianWrapper wrapper: techWrappers) {
-                if(wrapper.products.contains(productLine)) {
-                    productToTechsMap.get(productLine).add(wrapper.technician);
-                }
-            }
-        }
-    }
-
-    public PageReference save(){
+    public PageReference save() {
         try{
-            saveRecords();
+            saveRecords(false);
+        }
+        catch(Exception ex){
+            string errMsg = ex.getMessage();
+            ApexPages.addMessage(new apexPages.message(apexpages.severity.error, errMsg));
+        }
+        return null;
+    }
+    
+    public PageReference saveAndEmail() {
+        try{
+            saveRecords(true);
         }
         catch(Exception ex){
             string errMsg = ex.getMessage();
@@ -111,19 +76,43 @@ public with sharing class TechMassAssignmentController {
         ref.setRedirect(true);
         return ref;
     }
+    
+    public PageReference toggleFiltering() {
+        return null;
+    }
 
-    private void saveRecords() {
+    private void saveRecords(Boolean sendEmail) {
+        Id templateId = [SELECT Id FROM EmailTemplate WHERE DeveloperName = 'Technician_Assigned_to_WorkOrder' LIMIT 1].Id;
+        OrgWideEmailAddress owe = [SELECT Id, Address, DisplayName from OrgWideEmailAddress where DisplayName = 'BUNN'];
+        String replyToAddress = owe.Address;
         List<SVMXC__Service_Order__c> ordersToUpdate = new List<SVMXC__Service_Order__c>();
+        
         for(WorkOrderWrapper wrapper : workOrderWrappers) {
             System.debug(loggingLevel.Error, '*** wrapper: ' + wrapper);
             if(wrapper.chosenTechId == null) continue;
 
             wrapper.order.SVMXC__Group_Member__c = wrapper.chosenTechId;
-            // this is done within the workflow
-            //wrapper.order.SVMXC__Order_Status__c = 'Work Order Emailed';
+            
             for(TechnicianDistances tech : wrapper.technicians) {
                 if(tech.technician.Id == wrapper.chosenTechId) {
                     wrapper.techName = tech.technician.Name;
+                    if(sendEmail) {
+                        List<String> toAddresses = new List<String>((tech.technician.BSP_WorkOrder_Distribution_List__c).split(';'));
+                        wrapper.order.SVMXC__Order_Status__c = 'Work Order Emailed';
+                        EmailUtil.to(toAddresses)
+                            .senderDisplayName(owe.DisplayName)
+                            .replyTo('')
+                            .templateId(templateId)
+                            .targetObjectId(UserInfo.getUserId())
+                            .whatId(wrapper.order.Id)
+                            .treatTargetObjectAsRecipient(false)
+                            .saveAsActivity(true)
+                            .stashForBulk();                         
+                    }
+                    else {
+                        wrapper.order.SVMXC__Order_Status__c = 'SA Dispatched';
+                    }
+                    
                     if(tech.technician.SVMXC__Salesforce_User__c != null) {
                         wrapper.order.OwnerId = tech.technician.SVMXC__Salesforce_User__c;
                     }
@@ -136,64 +125,25 @@ public with sharing class TechMassAssignmentController {
         if(ordersToUpdate.size() > 0) {
             update ordersToUpdate;
         }
-        // creation and send of emails to techs happens within a workflow on change of SVMXC__Group_Member__c
-    }
-    
-
-    // this class is used to organize techs by product line on the WOs
-    public class TechnicianWrapper{
-        public SVMXC__Service_Group_Members__c technician {get; set;}
-        public Set<String> products {
-            get {
-                if(products == null) {
-                    products = populateProductsSet();
-                }
-                return products;
-            }
-            set;
-        }
-
-
-        public TechnicianWrapper(SVMXC__Service_Group_Members__c technician){
-            this.technician = technician;
-        }
-
-        private Set<String> populateProductsSet() {
-            List<String> productList_1 = splitString(technician.NTT_Product_Line_Serviced__c);
-            List<String> productList_2 = splitString(technician.BSP_Product_Line_Serviced_2__c);
-            Set<String> allProducts = new Set<String>();
-            if(productList_1 != null && productList_1.size() > 0) {
-                allProducts.addAll(productList_1);
-            }
-            if(productList_2 != null && productList_2.size() > 0) {
-                allProducts.addAll(productList_2);
-            }
-            return allProducts;
-        }
-
-        @TestVisible
-        private List<String> splitString(String str) {
-            if(str != null && str != '') {
-                return str.split(';');
-            }
-            return null;
+        if(EmailUtil.hasEmailsToSend()) {
+            EmailUtil.sendBulkEmail();
         }
         
     }
-
-
+    
+    
     // this class is used to create and hold all related info for each WO row on the page
     public class WorkOrderWrapper{
         public Id woId  {get; set;}
         public Id chosenTechId {get; set;}
         public String techName {get; set;}
+        public Boolean filterTechsByServ {get; set;}
+        public Boolean filterTechsByProd {get; set;}
         public SVMXC__Service_Order__c order {get; set;}
         public List<TechnicianDistances> technicians {get; set;}
         public List<SelectOption> optionsList {
             get {
-                if(optionsList == null) {
-                    optionsList = populateTechnicianOptions();
-                }
+                optionsList = populateTechnicianOptions();
                 return optionsList;
             }
             set;
@@ -215,7 +165,8 @@ public with sharing class TechMassAssignmentController {
             this.order = order;
             this.techName = order.SVMXC__Group_Member__r.Name;
             this.technicians = calcDistancesToWO(technicians);
-
+            this.filterTechsByServ = true;
+            this.filterTechsByProd = true;
         }
 
         public List<SelectOption> getItems() {
@@ -237,16 +188,25 @@ public with sharing class TechMassAssignmentController {
             techDistances.sort();
             return techDistances;
         }
-
+        
         private List<SelectOption> populateTechnicianOptions() {
             List<SelectOption> options = new List<SelectOption>();
             if(technicians.size() > 0) {
                 options.add(new SelectOption('', '-- Please Select --'));
-                for(TechnicianDistances tech : technicians) {
+                for(TechnicianDistances tech : technicians) {          
                     // filter out any exclusions
                     if(exclusions.contains(tech.technician.Id)) continue;
-                    // filter out techs if the WO has a Spec Servicer Code and the codes do not match
-                    if(order.Special_Servicer_Code__c != null && !order.Special_Servicer_Code__c.equalsIgnoreCase(tech.technician.Special_Servicer_Code__c)) continue;
+                    
+                    if(filterTechsByServ) {
+                        // filter out techs if the WO has a Spec Servicer Code and the codes do not match
+                        if(order.Special_Servicer_Code__c != null && !order.Special_Servicer_Code__c.equalsIgnoreCase(tech.technician.Special_Servicer_Code__c)) continue;
+                    }
+                    if(filterTechsByProd) {
+                        // filter out techs if product does not match
+                        if(!tech.products.contains(order.BSP_Product_Line__c)) {
+                            continue;
+                        }
+                    }
                     options.add(new SelectOption(tech.technician.Id, createTechString(tech)));
                 }
             }
@@ -269,7 +229,7 @@ public with sharing class TechMassAssignmentController {
                 Double dLon = toRadians(lon2 - lon1);
                 Double a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
                 Double c = 2 * Math.asin(Math.sqrt(a));
-                return (r * c * 0.62).setScale(3);
+                return (r * c * 0.62).round();
             }
 
             return 99999999;
@@ -282,34 +242,47 @@ public with sharing class TechMassAssignmentController {
     }
 
 
-    // this class is used to sort the technicians by servicer type and distance
+    // this class is used to sort the technicians by distance
     public class TechnicianDistances implements Comparable {
-        public final String TYPEORDER = 'FSL';
         public Decimal distanceHome;
         public Decimal distanceCurr;
-        public final Integer thisIndex;
         public SVMXC__Service_Group_Members__c technician;
-
-
+        public Set<String> products = new Set<String>();
+        
         public TechnicianDistances(Decimal distHome, Decimal distCurr, SVMXC__Service_Group_Members__c tech) {
             distanceHome = distHome;
             distanceCurr = distCurr;
             technician = tech;
-            thisIndex = TYPEORDER.indexOf(this.technician.NTT_Servicer_Type__c.subString(0,1));
+            products = populateProductsSet();
+        }
+        
+        private Set<String> populateProductsSet() {
+            List<String> productList_1 = splitString(technician.NTT_Product_Line_Serviced__c);
+            List<String> productList_2 = splitString(technician.BSP_Product_Line_Serviced_2__c);
+            Set<String> allProducts = new Set<String>();
+            if(productList_1 != null && productList_1.size() > 0) {
+                allProducts.addAll(productList_1);
+            }
+            if(productList_2 != null && productList_2.size() > 0) {
+                allProducts.addAll(productList_2);
+            }
+            return allProducts;
+        }
+
+        @TestVisible
+        private List<String> splitString(String str) {
+            if(str != null && str != '') {
+                return str.split(';');
+            }
+            return null;
         }
 
         public Integer compareTo(Object compareTo) {
             TechnicianDistances compareToTech = (TechnicianDistances)compareTo;
-            if(thisIndex == TYPEORDER.indexOf(compareToTech.technician.NTT_Servicer_Type__c.subString(0,1))) {
-                if (distanceCurr == compareToTech.distanceCurr) {
-                    return 0;
-                }
-                else if (distanceCurr > compareToTech.distanceCurr) {
-                    return 1;
-                }
-                return -1;        
+            if (distanceCurr == compareToTech.distanceCurr) {
+                return 0;
             }
-            else if (thisIndex > TYPEORDER.indexOf(compareToTech.technician.NTT_Servicer_Type__c.subString(0,1))) {
+            else if (distanceCurr > compareToTech.distanceCurr) {
                 return 1;
             }
             return -1;

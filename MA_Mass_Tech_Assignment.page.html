@@ -20,15 +20,13 @@
                     <apex:column headervalue="Available Technicians" id="technicians" >
                         <apex:selectList value="{!woWrapper.chosenTechId}" id="theTechList" multiSelect="false" title="Available Technicians" size="1">
                             <apex:selectOptions value="{!woWrapper.items}"/>
-                            <!-- <apex:actionSupport event="onchange" action="{!woWrapper.updateWorkOrder}" rerender="curTech" status="spinner"/> -->
                         </apex:selectList>
-                    <!-- <apex:actionStatus id="saveStatus" startText=" (saving...)" /> -->
                     </apex:column>
                     <apex:column headerValue="Order Status">
                             <apex:outputText value="{!woWrapper.order.SVMXC__Order_Status__c}" />
                     </apex:column>
                     <apex:column headerValue="Tech Declined Reason">
-                            <apex:inputText value="{!woWrapper.order.NTT_Tech_Declined_Reason__c}" />
+                            <apex:outputText value="{!woWrapper.order.NTT_Tech_Declined_Reason__c}" />
                     </apex:column>
                     <apex:column headerValue="Current Technician" id="curTech">
                             <apex:outputText value="{!woWrapper.techName}" />
@@ -37,7 +35,16 @@
                             <apex:outputText value="{!woWrapper.order.Special_Servicer_Code__c}" />
                     </apex:column>
                     <apex:column headerValue="Product Line">
-                            <apex:outputText value="{!woWrapper.order.NTT_Product_Line__c}" />
+                            <apex:outputText value="{!woWrapper.order.BSP_Product_Line__c}" />
+                    </apex:column>
+                    <apex:column headerValue="Priority">
+                            <apex:outputText value="{!woWrapper.order.SVMXC__Priority__c}" />
+                    </apex:column>
+                    <apex:column headerValue="Order Type">
+                            <apex:outputText value="{!woWrapper.order.SVMXC__Order_Type__c}" />
+                    </apex:column>
+                    <apex:column headerValue="Dispatch Notes">
+                            <apex:outputText value="{!woWrapper.order.Dispatch_Notes__c}" />
                     </apex:column>
                 </apex:pageBlockTable>
 

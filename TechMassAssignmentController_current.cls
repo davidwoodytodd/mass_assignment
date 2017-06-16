@@ -29,7 +29,8 @@ public with sharing class TechMassAssignmentController {
         }
 
         List<SVMXC__Service_Order__c> workOrders = [SELECT Id, Name, NTT_Tech_Declined_Reason__c, SVMXC__Group_Member__c, SVMXC__Group_Member__r.Name, SVMXC__Order_Status__c, 
-                                                    Special_Servicer_Code__c, NTT_Product_Line__c, SVMXC__Latitude__c, SVMXC__Longitude__c, Exclusion_List__c
+                                                    Special_Servicer_Code__c, BSP_Product_Line__c, SVMXC__Latitude__c, SVMXC__Longitude__c, Exclusion_List__c, SVMXC__Priority__c,
+                                                    SVMXC__Order_Type__c, Dispatch_Notes__c
                                                     FROM SVMXC__Service_Order__c WHERE (Id IN :workOrderIds)];
 
         // create map of products and avail techs that can be assigned
@@ -38,7 +39,7 @@ public with sharing class TechMassAssignmentController {
         // build WOs to be displayed on the page
         workOrderWrappers = new List<WorkOrderWrapper>();
         for(SVMXC__Service_Order__c workOrder: workOrders) {
-            workOrderWrappers.add(new WorkOrderWrapper(workOrder, availTechsByProduct.get(workOrder.NTT_Product_Line__c)));
+            workOrderWrappers.add(new WorkOrderWrapper(workOrder, availTechsByProduct.get(workOrder.BSP_Product_Line__c)));
         }
     }
 
@@ -46,8 +47,8 @@ public with sharing class TechMassAssignmentController {
         // create shell of available techs for each work order Product Line
         Map<String, List<SVMXC__Service_Group_Members__c>> productToTechsMap = new Map<String, List<SVMXC__Service_Group_Members__c>>();
         for(SVMXC__Service_Order__c order: workOrders) {
-            if(!productToTechsMap.containsKey(order.NTT_Product_Line__c)) {
-                productToTechsMap.put(order.NTT_Product_Line__c, new List<SVMXC__Service_Group_Members__c>());
+            if(!productToTechsMap.containsKey(order.BSP_Product_Line__c)) {
+                productToTechsMap.put(order.BSP_Product_Line__c, new List<SVMXC__Service_Group_Members__c>());
             }
         }
 
@@ -131,7 +132,7 @@ public with sharing class TechMassAssignmentController {
             }
             ordersToUpdate.add(wrapper.order);
         }
-
+        
         if(ordersToUpdate.size() > 0) {
             update ordersToUpdate;
         }
